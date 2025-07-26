@@ -53,9 +53,9 @@ llm-chatbot/
 
 ---
 
-## 🔌 How to Add Models
+## How to Add Models
 
-### 🐳 A. From Docker Desktop GUI (One-Click)
+### A. From Docker Desktop GUI (One-Click)
 
 1. Open Docker Desktop
 2. Click **"Add Model"**
@@ -77,7 +77,7 @@ To enable TCP connection for the model runner (required for API communication):
 
 ---
 
-### 🤗 B. From Hugging Face
+###  B. From Hugging Face
 
 You can also find compatible models manually:
 
@@ -103,7 +103,7 @@ docker model pull hf.co/TheBloke/Qwen1.5-7B-GGUF:Q4_K_M
 
 ---
 
-### 🧰 CLI: Install Model Runner (First Time Only)
+### CLI: Install Model Runner (First Time Only)
 
 ```bash
 docker extension install docker/model:latest
@@ -122,7 +122,7 @@ Or in Docker Desktop:
 
 ---
 
-## 🚀 Run It (Local Dev)
+## Run It (Local Dev)
 
 ```bash
 docker compose up -d
@@ -150,7 +150,7 @@ python-dotenv
 
 ---
 
-## ✅ Features to Explore
+## Features to Explore
 
 * [ ] Add Chat History (localStorage?)
 * [ ] Auth or Login (JWT, sessions)
@@ -158,12 +158,12 @@ python-dotenv
 
 ---
 
-## 🧐 Credits
+## Credits
 
 * Powered by Docker Model Runner
 
 ---
 
-## 📜 License
+## License
 
 MIT. Use freely. Attribution appreciated.
