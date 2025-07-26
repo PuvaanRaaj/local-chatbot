@@ -66,14 +66,14 @@ llm-chatbot/
 
 > 💡 Tip: Docker Model Runner currently **only supports GGUF models that are single-sharded** (not split into multiple files).
 
-![Add Model in Docker Desktop](demo/add-model-docker-desktop.png)
+![Add Model in Docker Desktop](static/add-model-docker-desktop.png)
 
 To enable TCP connection for the model runner (required for API communication):
 
 1. Go to **Settings > Features in Development**
 2. Enable **Model Runner TCP support**
 
-![Enable TCP in Docker Desktop](demo/enable-model-runner-tcp.png)
+![Enable TCP in Docker Desktop](static/enable-model-runner-tcp.png)
 
 ---
 
