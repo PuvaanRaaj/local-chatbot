@@ -51,21 +51,60 @@ llm-chatbot/
 * Docker Desktop
 * Docker Model Runner plugin
 
-### 2. Clone This Repo
+---
+
+## 🔌 How to Add Models
+
+### 🐳 A. From Docker Desktop GUI (One-Click)
+
+1. Open Docker Desktop
+2. Click **"Add Model"**
+3. Use the dropdown and select **any model** like:
+
+   * `ai/llama3.2`
+   * `ai/qwen3`
+   * `unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF`
+4. Click **“Pull”** and wait for it to finish.
+
+> 💡 Tip: Docker Model Runner currently **only supports GGUF models that are single-sharded** (not split into multiple files).
+
+![Add Model in Docker Desktop](demo/add-model-docker-desktop.png)
+
+---
+
+### 🤗 B. From Hugging Face
+
+You can also find compatible models manually:
+
+1. Go to [HuggingFace Models](https://huggingface.co/models)
+
+2. Filter:
+
+   * **Format**: `GGUF`
+   * **Library**: `Docker Model Runner`
+   * **Parameter Range**: `1B – 9B` *(models above 9B are often multi-shard and unsupported)*
+
+3. Choose a model like:
+
+   * `unsloth/Kimi-K2-Instruct-GGUF`
+   * `TheBloke/Qwen1.5-7B-GGUF`
+   * `NousResearch/Nous-Hermes-2-Mistral-7B-GGUF`
+
+4. Copy the full pull command from the model card (example):
 
 ```bash
-git clone https://github.com/yourname/llm-chatbot
-cd llm-chatbot
-cp .env.example .env
+docker model pull hf.co/TheBloke/Qwen1.5-7B-GGUF:Q4_K_M
 ```
 
-### 3. Install Docker Model Runner (Only Once)
+---
+
+### 🧰 CLI: Install Model Runner (First Time Only)
 
 ```bash
 docker extension install docker/model:latest
 ```
 
-Then enable TCP support:
+Then enable TCP:
 
 ```bash
 docker model install-runner --tcp 12434
@@ -76,33 +115,19 @@ Or in Docker Desktop:
 1. Go to **Settings > Features in Development**
 2. Enable **Model Runner TCP support**
 
-![Docker Model Runner Enable](demo/docker-model-runner-enable.png)
-
-### 4. Pull Your Model
-
-```bash
-docker model pull ai/llama3.2:latest
-```
-
-You may use any compatible model such as `ai/qwen3:latest`, `llama3.3:latest`, or  `unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF`.
-
 ---
 
-## 🛠 Run It (Local Dev)
-
-Use Docker to start the chatbot container:
+## 🚀 Run It (Local Dev)
 
 ```bash
 docker compose up -d
 ```
 
-Then visit: [http://localhost:12345](http://localhost:12345)
+Then open: [http://localhost:12345](http://localhost:12345)
 
 ---
 
 ## 🔧 .env
-
-Copy it:
 
 ```bash
 cp .env.example .env
@@ -128,7 +153,7 @@ python-dotenv
 
 ---
 
-## 🧠 Credits
+## 🧐 Credits
 
 * Powered by Docker Model Runner
 
