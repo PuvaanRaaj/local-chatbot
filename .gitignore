@@ -1,1 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+*.venv
+*.log
+
+# Flask
+instance/
 .env
+*.db
+*.sqlite
+
+# Docker
+*.pid
+*.swp
+.dockerignore
+docker-compose.override.yml
+
+# macOS
+.DS_Store
+
+# Node modules (if using npm for Tailwind or frontend tools)
+node_modules/
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# System
+*.bak
+*.tmp
+
+# Compiled output (if any)
+dist/
+build/
+
+# Frontend static cache
+static/cache/
