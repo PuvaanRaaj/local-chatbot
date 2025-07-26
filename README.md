@@ -60,10 +60,8 @@ llm-chatbot/
 1. Open Docker Desktop
 2. Click **"Add Model"**
 3. Use the dropdown and select **any model** like:
-
    * `ai/llama3.2`
    * `ai/qwen3`
-   * `unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF`
 4. Click **“Pull”** and wait for it to finish.
 
 > 💡 Tip: Docker Model Runner currently **only supports GGUF models that are single-sharded** (not split into multiple files).
