@@ -2,23 +2,19 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <title>LLM Code Chat</title>
-
-  <!-- Tailwind CDN -->
+  <title>LLM Chat Assistant</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
-
-  <!-- Markdown rendering + sanitization -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
-
   <style>
     .markdown pre {
-      background: #1e293b;
+      background: #0f172a;
       padding: 1em;
       border-radius: 6px;
       overflow-x: auto;
       position: relative;
+      border: 1px solid #334155;
     }
     .markdown code {
       background-color: transparent;
@@ -35,25 +31,31 @@
       border-radius: 4px;
       cursor: pointer;
     }
+    .timestamp {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      margin-top: 0.25rem;
+      text-align: right;
+    }
   </style>
 </head>
 <body class="bg-gray-950 text-gray-100 flex flex-col h-screen">
-
-  <!-- Toolbar -->
   <div class="bg-gray-900 border-b border-gray-800 p-4 flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-lg font-semibold">🧠 LLM Chat Assistant</h1>
+    <h1 class="text-lg font-semibold">LLM Chat Assistant</h1>
     <div class="flex flex-wrap gap-3 text-sm">
       <label>Mode:
         <select id="modeSelect" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1">
-          <option value="review">🚠 Code Review</option>
-          <option value="generate">⚙️ Code Generation</option>
-          <option value="ask">💡 General Questions</option>
-          <option value="debug">🐞 Debug Code</option>
-          <option value="optimize">🚀 Optimize Code</option>
+          <option value="review">Code Review</option>
+          <option value="generate">Code Generation</option>
+          <option value="ask">General Questions</option>
+          <option value="debug">Debug Code</option>
+          <option value="optimize">Optimize Code</option>
         </select>
       </label>
       <label>Model:
-        <select id="model" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1"></select>
+        <select id="model" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1">
+          <option disabled selected hidden>Select model</option>
+        </select>
       </label>
       <label>Format:
         <select id="format" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1">
@@ -61,28 +63,45 @@
           <option value="text" selected>Text</option>
         </select>
       </label>
+      <button id="exportBtn" class="bg-gray-700 px-3 py-1 rounded text-white text-xs">Export</button>
+      <div id="tokenCount" class="text-xs text-gray-400 ml-2"></div>
     </div>
   </div>
 
-  <!-- Chat Area -->
-  <div id="chat" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+  <div id="chat" class="flex-1 overflow-y-auto p-4 space-y-4 streaming-container"></div>
 
-  <!-- Input Area -->
   <form id="reviewForm" class="bg-gray-900 border-t border-gray-800 p-4">
     <div class="flex items-end gap-2">
-      <button type="button" onclick="document.getElementById('fileInput').click()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2 py-1 rounded text-sm">＋</button>
-      <textarea id="prompt" placeholder="Type your message..." rows="1"
-        class="flex-1 resize-none bg-gray-800 text-white border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:outline-none"></textarea>
-      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">➡️</button>
+      <textarea id="prompt" placeholder="Paste code for review..." rows="1"
+        class="flex-1 resize-none bg-gray-800 text-white border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:outline-none"
+        onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); form.dispatchEvent(new SubmitEvent('submit', { cancelable: true, bubbles: true })); }"
+      ></textarea>
+      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">Send</button>
     </div>
     <input type="file" id="fileInput" class="hidden" />
+    <div id="filePreview" class="text-sm text-gray-300 mt-2"></div>
   </form>
 
   <script>
+    marked.setOptions({
+      breaks: true,
+      highlight: (code) => code.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    });
+
     const chat = document.getElementById("chat");
     const form = document.getElementById("reviewForm");
     const promptBox = document.getElementById("prompt");
+    const fileInput = document.getElementById("fileInput");
+    const filePreview = document.getElementById("filePreview");
     const modeSelect = document.getElementById("modeSelect");
+    const modelSelect = document.getElementById("model");
+    const formatSelect = document.getElementById("format");
+    const exportBtn = document.getElementById("exportBtn");
+    const tokenCount = document.getElementById("tokenCount");
+
+    const chatHistory = [
+      { role: "system", content: "You are a helpful assistant." }
+    ];
 
     const modeMap = {
       review: { label: "Code Review", endpoint: "/chat/review", placeholder: "Paste code for review..." },
@@ -99,24 +118,52 @@
       modeSelect.value = mode;
     }
 
-    async function loadModels() {
-      const res = await fetch('/models');
-      const data = await res.json();
-      const select = document.getElementById('model');
-      (data.data || []).forEach((m) => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.id;
-        select.appendChild(opt);
-      });
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-      applyMode(currentMode);
-      loadModels();
+    modelSelect.addEventListener("change", () => {
+      if (chatHistory.length > 1) {
+        const confirmed = confirm("Switching models will clear the current chat history. Continue?");
+        if (confirmed) {
+          chat.innerHTML = "";
+          chatHistory.length = 1;
+          updateTokenCount();
+        }
+      }
     });
 
-    modeSelect.addEventListener("change", (e) => applyMode(e.target.value));
+    async function loadModels() {
+    const res = await fetch('/models');
+    const data = await res.json();
+    modelSelect.innerHTML = ''; // clear old options
+
+    const models = data.data || [];
+
+        models.forEach((m, idx) => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.id;
+            if (idx === 0) opt.selected = true;
+            modelSelect.appendChild(opt);
+        });
+    }
+
+
+    function countTokens(str) {
+      return str.split(/\s+/).length;
+    }
+
+    function updateTokenCount() {
+      const total = chatHistory.reduce((acc, m) => acc + countTokens(m.content), 0);
+      tokenCount.textContent = `Tokens: ${total}`;
+    }
+
+    exportBtn.addEventListener("click", () => {
+      const data = chatHistory.map(m => `${m.role.toUpperCase()}:\n${m.content}\n`).join("\n");
+      const blob = new Blob([data], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `chat-history-${Date.now()}.txt`;
+      a.click();
+    });
 
     function addMessage(role, content = "") {
       const wrapper = document.createElement("div");
@@ -124,9 +171,16 @@
       const bubble = document.createElement("div");
       bubble.className =
         "rounded-lg px-4 py-3 max-w-3xl shadow " +
-        (role === "user" ? "bg-blue-600 text-white ml-auto" : "bg-gray-800 text-gray-100 mr-auto");
-      bubble.innerHTML = DOMPurify.sanitize(role === "assistant" ? marked.parse(content) : content);
+        (role === "user" ? "bg-blue-600 text-white ml-auto" : "bg-gray-800 text-gray-100 mr-auto border border-gray-700");
+      bubble.innerHTML = DOMPurify.sanitize(role === "assistant" ? marked.parse(content) : content, { ADD_ATTR: ['target'] });
       wrapper.appendChild(bubble);
+
+      const timestamp = document.createElement("div");
+      timestamp.className = "timestamp";
+      const now = new Date();
+      timestamp.textContent = now.toLocaleTimeString();
+      wrapper.appendChild(timestamp);
+
       chat.appendChild(wrapper);
       chat.scrollTop = chat.scrollHeight;
       if (role === "assistant") setTimeout(() => addCopyButtons(bubble), 50);
@@ -154,7 +208,7 @@
       let rendered = "";
       for (const token of tokens) {
         rendered += token;
-        el.innerHTML = DOMPurify.sanitize(marked.parse(rendered));
+        el.innerHTML = DOMPurify.sanitize(marked.parse(rendered), { ADD_ATTR: ['target'] });
         chat.scrollTop = chat.scrollHeight;
         await new Promise((r) => setTimeout(r, 30));
       }
@@ -164,29 +218,38 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const prompt = promptBox.value.trim();
-      const file = document.getElementById("fileInput").files[0];
-      const format = document.getElementById("format").value;
-      const model = document.getElementById("model").value;
-      let promptText = prompt;
-      if (file) promptText = await file.text();
-      if (!promptText) return;
-      addMessage("user", promptText);
+      const format = formatSelect.value;
+      const model = modelSelect.value;
+      if (!prompt) return;
+      addMessage("user", prompt);
+      chatHistory.push({ role: "user", content: prompt });
+      updateTokenCount();
       promptBox.value = "";
+      filePreview.innerHTML = "";
       const bubble = addMessage("assistant", "▍");
       try {
         const res = await fetch(modeMap[currentMode].endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: promptText, model, format })
+        //   body: JSON.stringify({ messages: chatHistory, model, format })
+        body: JSON.stringify({ prompt, model, format })
+
         });
         const contentType = res.headers.get("Content-Type");
         const output = contentType.includes("application/json") ? await res.json() : await res.text();
         const message = typeof output === "string" ? output : output.text || output.choices?.[0]?.message?.content || JSON.stringify(output);
         bubble.innerText = "";
+        chatHistory.push({ role: "assistant", content: message });
+        updateTokenCount();
         await simulateStreamingText(bubble, message);
       } catch (err) {
         bubble.innerText = "❌ Error: " + err.message;
       }
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadModels();
+      applyMode(currentMode);
     });
   </script>
 </body>
