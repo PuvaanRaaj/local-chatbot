@@ -19,8 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Dynamic GitHub changelog viewer using JS fetch  
-- Collapsible `<details>` block for changelog UI  
+- Dynamic GitHub changelog viewer using JS fetch
+- Collapsible `<details>` block for changelog UI
 - Modern Tailwind layout for assistant mode selector
 
 ### Changed
@@ -33,8 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Dark mode support  
-- TailwindCSS card layout  
+- Dark mode support
+- TailwindCSS card layout
 - Mode selector UI (Review, Generate, Optimize, etc.)
 
 ---
