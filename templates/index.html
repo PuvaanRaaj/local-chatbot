@@ -2,49 +2,89 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <title>Choose Chat Mode</title>
+  <title>Choose Chat Assistant</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: 'class' };
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif']
+          }
+        }
+      }
+    };
   </script>
 </head>
-<body class="bg-gray-950 text-white min-h-screen p-6 font-sans flex flex-col items-center">
+<body class="bg-gray-950 text-white min-h-screen font-sans flex flex-col items-center justify-center px-4 py-8">
 
-  <h1 class="text-3xl font-bold mb-6 text-center">💬 Choose Your Chat Assistant</h1>
+  <main class="w-full max-w-6xl">
+    <h1 class="text-4xl font-bold mb-10 text-center">💬 Choose Your Chat Assistant</h1>
 
-  <div class="grid gap-6 md:grid-cols-2 max-w-4xl w-full">
+    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <a href="/chat.html?mode=review" class="bg-gray-800 hover:bg-blue-600 transition p-6 rounded-2xl shadow border border-gray-700">
+        <h2 class="text-xl font-semibold mb-2">🛠 Code Review</h2>
+        <p>Analyze your code for bugs, security issues, best practices, and performance with professional-level feedback.</p>
+      </a>
 
-    <a href="/chat.html?mode=review"
-       class="bg-gray-800 hover:bg-blue-600 transition text-white p-6 rounded-lg shadow border border-gray-700">
-      <h2 class="text-xl font-semibold mb-2">🛠 Code Review</h2>
-      <p>Analyze your code for bugs, security issues, best practices, and performance with professional-level feedback.</p>
-    </a>
+      <a href="/chat.html?mode=generate" class="bg-gray-800 hover:bg-green-600 transition p-6 rounded-2xl shadow border border-gray-700">
+        <h2 class="text-xl font-semibold mb-2">📦 Code Generation</h2>
+        <p>Generate clean, modern code — ready to copy-paste into your project.</p>
+      </a>
 
-    <a href="/chat.html?mode=generate"
-       class="bg-gray-800 hover:bg-green-600 transition text-white p-6 rounded-lg shadow border border-gray-700">
-      <h2 class="text-xl font-semibold mb-2">⚙️ Code Generation</h2>
-      <p>Generate clean, modern code based on your request — ready to copy-paste into your project.</p>
-    </a>
+      <a href="/chat.html?mode=ask" class="bg-gray-800 hover:bg-yellow-600 transition p-6 rounded-2xl shadow border border-gray-700">
+        <h2 class="text-xl font-semibold mb-2">❓ General Questions</h2>
+        <p>Ask anything — technical how-tos, architecture, or general advice.</p>
+      </a>
 
-    <a href="/chat.html?mode=ask"
-       class="bg-gray-800 hover:bg-yellow-600 transition text-white p-6 rounded-lg shadow border border-gray-700">
-      <h2 class="text-xl font-semibold mb-2">💡 General Questions</h2>
-      <p>Ask anything — technical questions, how-tos, or general advice. The assistant will answer clearly and thoroughly.</p>
-    </a>
+      <a href="/chat.html?mode=debug" class="bg-gray-800 hover:bg-red-600 transition p-6 rounded-2xl shadow border border-gray-700">
+        <h2 class="text-xl font-semibold mb-2">🐞 Debug Code</h2>
+        <p>Paste broken code and get help identifying bugs and logic flaws.</p>
+      </a>
 
-    <a href="/chat.html?mode=debug"
-       class="bg-gray-800 hover:bg-red-600 transition text-white p-6 rounded-lg shadow border border-gray-700">
-      <h2 class="text-xl font-semibold mb-2">🐞 Debug Code</h2>
-      <p>Paste broken code and get help identifying bugs, logic flaws, and suggestions to fix them.</p>
-    </a>
+      <a href="/chat.html?mode=optimize" class="bg-gray-800 hover:bg-purple-600 transition p-6 rounded-2xl shadow border border-gray-700">
+        <h2 class="text-xl font-semibold mb-2">⚡ Optimize Code</h2>
+        <p>Improve code speed, structure, and clarity with expert advice.</p>
+      </a>
+    </div>
 
-    <a href="/chat.html?mode=optimize"
-       class="bg-gray-800 hover:bg-purple-600 transition text-white p-6 rounded-lg shadow border border-gray-700">
-      <h2 class="text-xl font-semibold mb-2">🚀 Optimize Code</h2>
-      <p>Get advice on making your code faster, more efficient, and cleaner.</p>
-    </a>
+    <div class="mt-12 max-w-2xl mx-auto text-sm text-gray-400 text-center">
+      <p><strong>Note:</strong> This assistant currently <span class="text-red-400">does not retain memory</span> across messages.</p>
+      <p class="mt-2"><span class="text-yellow-300">Larger models</span> may take longer to respond. Please be patient.</p>
+    </div>
 
-  </div>
+    <div class="mt-12 max-w-2xl mx-auto text-sm text-gray-400 text-center">
+      <h3 class="text-white font-semibold text-lg mb-3">📢 What's New</h3>
+      <ul class="list-disc list-inside text-left mx-auto">
+        <li>🚀 New "Optimize Code" mode added</li>
+        <li>🕓 Token counter and timestamp per message</li>
+        <li>💾 Export chat history feature</li>
+      </ul>
+
+      <details id="changelogSection" class="mt-6 bg-gray-900 text-left p-4 rounded-lg border border-gray-700">
+        <summary class="cursor-pointer font-semibold text-white hover:text-blue-400">📝 View Full Changelog (from GitHub)</summary>
+        <pre id="changelogContent" class="whitespace-pre-wrap text-sm mt-4 text-gray-300 max-h-80 overflow-auto">Loading...</pre>
+      </details>
+    </div>
+  </main>
+
+  <script>
+    const changelogURL = "https://raw.githubusercontent.com/puvaanraaj/local-chatbot/main/CHANGELOG.md";
+
+    fetch(changelogURL)
+      .then(res => {
+        if (!res.ok) throw new Error("Changelog not found");
+        return res.text();
+      })
+      .then(data => {
+        document.getElementById("changelogContent").textContent = data;
+      })
+      .catch(err => {
+        document.getElementById("changelogContent").textContent = "⚠️ Unable to load changelog. Please try again later.";
+        console.error(err);
+      });
+  </script>
 
 </body>
 </html>
