@@ -16,7 +16,7 @@ def run_chat(prompt, system_prompt, model, response_format):
         response = requests.post(
             f"{MODEL_RUNNER_API}/engines/llama.cpp/v1/chat/completions",
             json=payload,
-            timeout=120
+            timeout=600
         )
         response.raise_for_status()
         llm_response = response.json()
