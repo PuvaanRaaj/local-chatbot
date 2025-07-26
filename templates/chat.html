@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <title>LLM Code Chat</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+
+  <!-- Markdown rendering + sanitization -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+
+  <style>
+    .markdown pre {
+      background: #1e293b;
+      padding: 1em;
+      border-radius: 6px;
+      overflow-x: auto;
+      position: relative;
+    }
+    .markdown code {
+      background-color: transparent;
+      color: inherit;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.5em;
+      right: 0.5em;
+      background-color: #334155;
+      color: white;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 flex flex-col h-screen">
+
+  <!-- Toolbar -->
+  <div class="bg-gray-900 border-b border-gray-800 p-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-lg font-semibold">🧠 LLM Chat Assistant</h1>
+    <div class="flex flex-wrap gap-3 text-sm">
+      <label>Mode:
+        <select id="modeSelect" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1">
+          <option value="review">🚠 Code Review</option>
+          <option value="generate">⚙️ Code Generation</option>
+          <option value="ask">💡 General Questions</option>
+          <option value="debug">🐞 Debug Code</option>
+          <option value="optimize">🚀 Optimize Code</option>
+        </select>
+      </label>
+      <label>Model:
+        <select id="model" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1"></select>
+      </label>
+      <label>Format:
+        <select id="format" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1">
+          <option value="json">JSON</option>
+          <option value="text" selected>Text</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <!-- Chat Area -->
+  <div id="chat" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+
+  <!-- Input Area -->
+  <form id="reviewForm" class="bg-gray-900 border-t border-gray-800 p-4">
+    <div class="flex items-end gap-2">
+      <button type="button" onclick="document.getElementById('fileInput').click()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2 py-1 rounded text-sm">＋</button>
+      <textarea id="prompt" placeholder="Type your message..." rows="1"
+        class="flex-1 resize-none bg-gray-800 text-white border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:outline-none"></textarea>
+      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">➡️</button>
+    </div>
+    <input type="file" id="fileInput" class="hidden" />
+  </form>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const form = document.getElementById("reviewForm");
+    const promptBox = document.getElementById("prompt");
+    const modeSelect = document.getElementById("modeSelect");
+
+    const modeMap = {
+      review: { label: "Code Review", endpoint: "/chat/review", placeholder: "Paste code for review..." },
+      generate: { label: "Code Generation", endpoint: "/chat/generate", placeholder: "Describe the code to generate..." },
+      ask: { label: "General Questions", endpoint: "/chat/ask", placeholder: "Ask anything..." },
+      debug: { label: "Debug Code", endpoint: "/chat/debug", placeholder: "Paste buggy code..." },
+      optimize: { label: "Optimize Code", endpoint: "/chat/optimize", placeholder: "Paste slow code to optimize..." },
+    };
+
+    let currentMode = new URLSearchParams(location.search).get("mode") || "ask";
+    function applyMode(mode) {
+      currentMode = mode;
+      promptBox.placeholder = modeMap[mode].placeholder;
+      modeSelect.value = mode;
+    }
+
+    async function loadModels() {
+      const res = await fetch('/models');
+      const data = await res.json();
+      const select = document.getElementById('model');
+      (data.data || []).forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.id;
+        select.appendChild(opt);
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      applyMode(currentMode);
+      loadModels();
+    });
+
+    modeSelect.addEventListener("change", (e) => applyMode(e.target.value));
+
+    function addMessage(role, content = "") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "markdown text-sm whitespace-pre-wrap";
+      const bubble = document.createElement("div");
+      bubble.className =
+        "rounded-lg px-4 py-3 max-w-3xl shadow " +
+        (role === "user" ? "bg-blue-600 text-white ml-auto" : "bg-gray-800 text-gray-100 mr-auto");
+      bubble.innerHTML = DOMPurify.sanitize(role === "assistant" ? marked.parse(content) : content);
+      wrapper.appendChild(bubble);
+      chat.appendChild(wrapper);
+      chat.scrollTop = chat.scrollHeight;
+      if (role === "assistant") setTimeout(() => addCopyButtons(bubble), 50);
+      return bubble;
+    }
+
+    function addCopyButtons(bubble) {
+      bubble.querySelectorAll("pre").forEach((pre) => {
+        if (!pre.querySelector(".copy-btn")) {
+          const btn = document.createElement("button");
+          btn.className = "copy-btn";
+          btn.innerText = "Copy";
+          btn.onclick = () => {
+            navigator.clipboard.writeText(pre.innerText);
+            btn.innerText = "Copied!";
+            setTimeout(() => (btn.innerText = "Copy"), 1500);
+          };
+          pre.appendChild(btn);
+        }
+      });
+    }
+
+    async function simulateStreamingText(el, text) {
+      const tokens = text.split(/(?<=\s)/);
+      let rendered = "";
+      for (const token of tokens) {
+        rendered += token;
+        el.innerHTML = DOMPurify.sanitize(marked.parse(rendered));
+        chat.scrollTop = chat.scrollHeight;
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      setTimeout(() => addCopyButtons(el), 100);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const prompt = promptBox.value.trim();
+      const file = document.getElementById("fileInput").files[0];
+      const format = document.getElementById("format").value;
+      const model = document.getElementById("model").value;
+      let promptText = prompt;
+      if (file) promptText = await file.text();
+      if (!promptText) return;
+      addMessage("user", promptText);
+      promptBox.value = "";
+      const bubble = addMessage("assistant", "▍");
+      try {
+        const res = await fetch(modeMap[currentMode].endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: promptText, model, format })
+        });
+        const contentType = res.headers.get("Content-Type");
+        const output = contentType.includes("application/json") ? await res.json() : await res.text();
+        const message = typeof output === "string" ? output : output.text || output.choices?.[0]?.message?.content || JSON.stringify(output);
+        bubble.innerText = "";
+        await simulateStreamingText(bubble, message);
+      } catch (err) {
+        bubble.innerText = "❌ Error: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
