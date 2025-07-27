@@ -1,16 +1,28 @@
+# Dockerfile
+
+FROM python:3.12-slim AS python-api
+
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+
+# Build Go binary
+FROM golang:1.22-alpine AS go-builder
+
+WORKDIR /goapp
+COPY . .
+RUN go build -o /go-server main.go
+
+# Final combined container
 FROM python:3.12-slim
 
-# Install system dependencies
+WORKDIR /app
+COPY --from=python-api /app /app
+COPY --from=go-builder /go-server /go-server
+
 RUN apt update && apt install -y curl
 
-# Set up working directory (your app will be mounted here via Docker Compose)
-WORKDIR /app
+EXPOSE 12345
 
-# Copy requirements.txt into the container
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Default command to run the app
-CMD ["python", "app.py"]
+CMD ["sh", "-c", "python app.py & ./go-server"]
