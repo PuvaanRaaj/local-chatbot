@@ -1,7 +1,9 @@
-from flask import Flask
-from routes.chat_routes import chat_bp
-from dotenv import load_dotenv
 import os
+
+from dotenv import load_dotenv
+from flask import Flask
+
+from routes.chat_routes import chat_bp
 
 load_dotenv()
 
@@ -10,5 +12,7 @@ app.register_blueprint(chat_bp)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 12345))
+    host = os.getenv("HOST")
     debug = os.getenv("DEBUG", "false").lower() == "true"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+
+    app.run(host=host, port=port, debug=debug)
