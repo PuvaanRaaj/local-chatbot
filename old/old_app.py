@@ -1,3 +1,5 @@
+import os
+
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -168,4 +170,8 @@ SYSTEM_PROMPTS = {
 }
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    port = int(os.getenv("PORT", 12345))
+    host = os.getenv("HOST")
+    debug = os.getenv("DEBUG", "false").lower() == "true"
+
+    app.run(host=host, port=port, debug=debug)
