@@ -1,7 +1,9 @@
-from flask import Flask
-from routes.chat_routes import chat_bp
-from dotenv import load_dotenv
 import os
+
+from dotenv import load_dotenv
+from flask import Flask
+
+from routes.chat_routes import chat_bp
 
 load_dotenv()
 

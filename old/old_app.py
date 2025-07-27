@@ -1,6 +1,7 @@
-from flask import Flask, request, jsonify, send_from_directory
-import requests
 import os
+
+import requests
+from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__)
 MODEL_RUNNER_API = "http://host.docker.internal:12434"
