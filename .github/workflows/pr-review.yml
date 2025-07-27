@@ -10,7 +10,6 @@ permissions:
 jobs:
   llama-review:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout PR code
         uses: actions/checkout@v3
@@ -34,24 +33,8 @@ jobs:
           sudo apt-get install docker-model-plugin
           docker model version
 
-      - name: Restore cached LLM model
-        id: cache-llm
-        uses: actions/cache@v3
-        with:
-          path: llama3_model.tar
-          key: llama3-model-cache-v1
-
-      - name: Load or Pull LLM model
-        run: |
-          if [ -f llama3_model.tar ]; then
-            echo "Loading model from cache..."
-            docker model load -i llama3_model.tar
-          else
-            echo "Model not found in cache. Pulling..."
-            docker model pull ai/llama3.2:latest
-            echo "Saving pulled model to tar for caching..."
-            docker model save ai/llama3.2:latest -o llama3_model.tar
-          fi
+      - name: Pull LLM model
+        run: docker model pull ai/llama3.2:latest
 
       - name: Run LLM Code Review
         run: |
