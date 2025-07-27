@@ -5,21 +5,39 @@ on: [push]
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install ruff black isort bandit safety pip-audit
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('.github/workflows/lint-and-test.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install tools
+        run: pip install ruff black isort bandit safety pip-audit
+
       - name: Run Ruff
         run: ruff check .
+
       - name: Run Black
         run: black --check .
+
       - name: Run isort
         run: isort --check-only .
+
       - name: Run Bandit
         run: bandit -r .
+
       - name: Run Safety
         run: safety check
+
       - name: Run pip-audit
         run: pip-audit
