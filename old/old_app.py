@@ -1,5 +1,3 @@
-import os
-
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 
