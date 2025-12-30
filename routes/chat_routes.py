@@ -2,24 +2,21 @@ from flask import Blueprint, jsonify, request, send_from_directory
 
 from config.prompts import SYSTEM_PROMPTS
 from services.llama_runner import run_chat
+from services.database_service import run_database_chat
 
 chat_bp = Blueprint("chat_bp", __name__)
-
 
 @chat_bp.route("/")
 def index():
     return send_from_directory("templates", "index.html")
 
-
 @chat_bp.route("/chat.html")
 def chat_ui():
     return send_from_directory("templates", "chat.html")
 
-
 @chat_bp.route("/models", methods=["GET"])
 def list_models():
     import requests
-
     try:
         response = requests.get(
             "http://host.docker.internal:12434/engines/llama.cpp/v1/models", timeout=10
@@ -29,7 +26,6 @@ def list_models():
     except requests.exceptions.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
-
 def extract_payload(data):
     return (
         data.get("prompt", ""),
@@ -37,15 +33,33 @@ def extract_payload(data):
         data.get("format", "json"),
     )
 
+# Optional aliases to be forgiving with paths
+ALIASES = {
+    "database query": "database",
+    "database-query": "database",
+    "db": "database",
+}
 
 @chat_bp.route("/chat/<mode>", methods=["POST"])
 def dynamic_chat_handler(mode):
+    print(f"DEBUG: Handler called with mode: {mode}", flush=True)
+
+    # Normalize mode and apply aliases
+    norm = (mode or "").strip().lower()
+    mode = ALIASES.get(norm, norm)
+
     if mode not in SYSTEM_PROMPTS:
         return jsonify({"error": "Invalid mode"}), 400
 
-    data = request.json
+    data = request.json or {}
     prompt, model, fmt = extract_payload(data)
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
+    # Special handling for database mode
+    if mode == "database":
+        print("DEBUG: Calling run_database_chat", flush=True)
+        return run_database_chat(prompt, model, fmt)
+
+    print(f"DEBUG: Calling run_chat with mode: {mode}", flush=True)
     return run_chat(prompt, SYSTEM_PROMPTS[mode], model, fmt)

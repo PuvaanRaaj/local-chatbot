@@ -53,8 +53,38 @@ $AGGREGATED_CODE
 
 Please provide a detailed, professional review focusing on the most impactful improvements."
 
-# Run the model
-RESPONSE=$(docker model run "$MODEL" "$PROMPT" 2>/dev/null)
+# # Run the model
+# RESPONSE=$(docker model run "$MODEL" "$PROMPT" 2>/dev/null)
 
-# Write to review file
-echo -e "$RESPONSE" >> "$REPORT_FILE"
+# # Write to review file
+# echo -e "$RESPONSE" >> "$REPORT_FILE"
+
+
+# --- Diagnostics ---
+echo "Running model: $MODEL"
+echo "Prompt size (bytes): $(printf '%s' "$PROMPT" | wc -c)"
+echo "Prompt preview (first 30 lines):"
+printf '%s\n' "$PROMPT" | sed -n '1,30p'
+echo "---- end preview ----"
+
+# --- Run the model with full logging ---
+# Capture BOTH stdout and stderr, and the exit code
+MODEL_OUTPUT_FILE="$(mktemp -t model_output.XXXXXX)"
+if ! docker model run "$MODEL" "$PROMPT" >"$MODEL_OUTPUT_FILE" 2>&1; then
+  echo "ERROR: docker model run failed (exit code $?). Full output:"
+  cat "$MODEL_OUTPUT_FILE"
+  echo
+  echo "Tip: remove quotes around \$PROMPT or pass via stdin/file if the CLI expects input differently."
+  rm -f "$MODEL_OUTPUT_FILE"
+  exit 1
+fi
+
+# Show a short success summary
+echo "Model call succeeded. Output size (bytes): $(wc -c < "$MODEL_OUTPUT_FILE")"
+
+# Append to report file
+echo -e "\n" >> "$REPORT_FILE"
+cat "$MODEL_OUTPUT_FILE" >> "$REPORT_FILE"
+rm -f "$MODEL_OUTPUT_FILE"
+
+echo "Wrote review to $REPORT_FILE"

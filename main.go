@@ -3,7 +3,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -41,6 +40,7 @@ var systemPrompts = map[string]string{
 	"ask":      "You are a helpful assistant. Answer clearly and concisely.",
 	"debug":    "You are a debugging expert. Explain bugs and fixes.",
 	"optimize": "You are a performance engineer. Suggest optimizations.",
+	"database": "You are an intelligent database assistant that helps users query MySQL databases using natural language.\n\nYour task is to:\n1. Understand the user's natural language query\n2. Generate appropriate SQL queries\n3. The user has access to 3 databases: onlinepayment1, onlinepayment2, and onlinepayment3\n4. Each database contains many tables\n\nImportant rules:\n- ALWAYS generate ONLY valid SQL queries without any explanation or markdown formatting\n- Do NOT wrap the SQL in code blocks or markdown\n- Return ONLY the SQL query that can be executed directly\n- If you need to show tables in a database, use: SHOW TABLES\n- If you need to describe a table, use: DESCRIBE table_name\n- If you need to see databases, use: SHOW DATABASES\n- Use appropriate database names (onlinepayment1, onlinepayment2, or onlinepayment3) in your queries\n- Be careful with SELECT queries - always specify a LIMIT for large tables (default LIMIT 100 unless specified)\n\nAlways prefix your SQL with the appropriate USE database statement.",
 }
 
 func main() {

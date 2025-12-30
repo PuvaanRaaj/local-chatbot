@@ -19,10 +19,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY --from=python-api /app /app
-COPY --from=go-builder /go-server /go-server
+COPY --from=go-builder /go-server /app/go-server
+
+# Install Python dependencies
+RUN pip install --no-cache-dir flask requests python-dotenv pymysql
 
 RUN apt update && apt install -y curl
 
 EXPOSE 12345
 
-CMD ["sh", "-c", "python app.py & ./go-server"]
+CMD ["sh", "-c", "python app.py & /app/go-server"]

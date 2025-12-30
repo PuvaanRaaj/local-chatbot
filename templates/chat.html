@@ -16,26 +16,42 @@
       position: relative;
       border: 1px solid #334155;
     }
-    .markdown code {
-      background-color: transparent;
-      color: inherit;
-    }
+    .markdown code { background-color: transparent; color: inherit; }
     .copy-btn {
-      position: absolute;
-      top: 0.5em;
-      right: 0.5em;
-      background-color: #334155;
-      color: white;
-      padding: 2px 8px;
-      font-size: 0.75rem;
-      border-radius: 4px;
-      cursor: pointer;
+      position: absolute; top: 0.5em; right: 0.5em;
+      background-color: #334155; color: white; padding: 2px 8px;
+      font-size: 0.75rem; border-radius: 4px; cursor: pointer;
     }
-    .timestamp {
-      font-size: 0.7rem;
-      color: #94a3b8;
-      margin-top: 0.25rem;
-      text-align: right;
+    .timestamp { font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem; text-align: right; }
+
+    /* DB result table */
+    .db-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.85rem;
+    }
+    .db-table th, .db-table td {
+      border-bottom: 1px solid #334155;
+      padding: 8px 10px;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    .db-table th {
+      text-align: left;
+      position: sticky;
+      top: 0;
+      background: #0b1220;
+      z-index: 1;
+    }
+    .scroll-x { overflow-x: auto; }
+    .code-chip {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+      padding: .75rem; position: relative;
+    }
+    .btn {
+      border: 1px solid #334155; background: #1f2937; color: #e5e7eb; border-radius: 6px; padding: .25rem .5rem; font-size: .75rem;
     }
   </style>
 </head>
@@ -50,6 +66,7 @@
           <option value="ask">General Questions</option>
           <option value="debug">Debug Code</option>
           <option value="optimize">Optimize Code</option>
+          <option value="database">Database Query</option>
         </select>
       </label>
       <label>Model:
@@ -59,8 +76,8 @@
       </label>
       <label>Format:
         <select id="format" class="ml-1 bg-gray-800 border border-gray-700 rounded px-2 py-1">
-          <option value="json">JSON</option>
-          <option value="text" selected>Text</option>
+          <option value="json" selected>JSON</option>
+          <option value="text">Text</option>
         </select>
       </label>
       <button id="exportBtn" class="bg-gray-700 px-3 py-1 rounded text-white text-xs">Export</button>
@@ -85,11 +102,29 @@
   </form>
 
   <script>
+    function getAssistantMessage(obj) {
+  if (!obj) return null;
+  if (typeof obj === "string") return obj;
+  const m =
+    obj?.choices?.[0]?.message?.content ??
+    obj?.message?.content ??
+    obj?.text ??
+    null;
+  return (typeof m === "string") ? m : null;
+}
+
+function looksLikeDbJson(obj) {
+  // unchanged, but keep it here for context
+  return obj && (obj.generated_sql || obj.columns || obj.rows || typeof obj.success === "boolean");
+}
+
+    // --- Markdown sanitization / rendering
     marked.setOptions({
       breaks: true,
       highlight: (code) => code.replace(/</g, '&lt;').replace(/>/g, '&gt;')
     });
 
+    // --- DOM refs
     const chat = document.getElementById("chat");
     const form = document.getElementById("reviewForm");
     const promptBox = document.getElementById("prompt");
@@ -101,24 +136,31 @@
     const exportBtn = document.getElementById("exportBtn");
     const tokenCount = document.getElementById("tokenCount");
 
-    const chatHistory = [
-      { role: "system", content: "You are a helpful assistant." }
-    ];
+    // --- State
+    const chatHistory = [{ role: "system", content: "You are a helpful assistant." }];
 
     const modeMap = {
-      review: { label: "Code Review", endpoint: "/chat/review", placeholder: "Paste code for review..." },
-      generate: { label: "Code Generation", endpoint: "/chat/generate", placeholder: "Describe the code to generate..." },
-      ask: { label: "General Questions", endpoint: "/chat/ask", placeholder: "Ask anything..." },
-      debug: { label: "Debug Code", endpoint: "/chat/debug", placeholder: "Paste buggy code..." },
-      optimize: { label: "Optimize Code", endpoint: "/chat/optimize", placeholder: "Paste slow code to optimize..." },
+      review:   { label: "Code Review",    endpoint: "/chat/review",    placeholder: "Paste code for review..." },
+      generate: { label: "Code Generation",endpoint: "/chat/generate",  placeholder: "Describe the code to generate..." },
+      ask:      { label: "General Questions", endpoint: "/chat/ask",    placeholder: "Ask anything..." },
+      debug:    { label: "Debug Code",     endpoint: "/chat/debug",     placeholder: "Paste buggy code..." },
+      optimize: { label: "Optimize Code",  endpoint: "/chat/optimize",  placeholder: "Paste slow code to optimize..." },
+      database: { label: "Database Query", endpoint: "/chat/database",  placeholder: "Ask about your database (e.g., 'Show tables in onlinepayment1')" },
     };
 
+    // Read initial mode from URL (?mode=database) or default
     let currentMode = new URLSearchParams(location.search).get("mode") || "ask";
+
     function applyMode(mode) {
       currentMode = mode;
       promptBox.placeholder = modeMap[mode].placeholder;
       modeSelect.value = mode;
+      // Prefer JSON when Database mode is selected
+      if (mode === "database") formatSelect.value = "json";
     }
+
+    // keep currentMode in sync with dropdown
+    modeSelect.addEventListener("change", (e) => applyMode(e.target.value));
 
     modelSelect.addEventListener("change", () => {
       if (chatHistory.length > 1) {
@@ -145,10 +187,7 @@
       });
     }
 
-    function countTokens(str) {
-      return str.split(/\s+/).length;
-    }
-
+    function countTokens(str) { return str.split(/\s+/).length; }
     function updateTokenCount() {
       const total = chatHistory.reduce((acc, m) => acc + countTokens(m.content), 0);
       tokenCount.textContent = `Tokens: ${total}`;
@@ -169,7 +208,7 @@
       wrapper.className = "markdown text-sm whitespace-pre-wrap";
       const bubble = document.createElement("div");
       bubble.className =
-        "rounded-lg px-4 py-3 max-w-3xl shadow " +
+        "rounded-lg px-4 py-3 max-w-5xl shadow " +
         (role === "user" ? "bg-blue-600 text-white ml-auto" : "bg-gray-800 text-gray-100 mr-auto border border-gray-700");
       bubble.innerHTML = DOMPurify.sanitize(role === "assistant" ? marked.parse(content) : content, { ADD_ATTR: ['target'] });
       wrapper.appendChild(bubble);
@@ -214,44 +253,205 @@
       setTimeout(() => addCopyButtons(el), 100);
     }
 
+    // ---------- DB RENDERING HELPERS ----------
+    function renderDbCard(target, payload) {
+      // payload: { success, message, generated_sql, columns, rows, row_count }
+      const ok = payload.success !== false;
+      const status = ok ? "Query Executed Successfully" : "Query Failed";
+      const rowCount = payload.row_count ?? (Array.isArray(payload.rows) ? payload.rows.length : 0);
+
+      const wrap = document.createElement("div");
+      wrap.className = "rounded-lg p-4 max-w-5xl mr-auto bg-gray-800 border border-gray-700 text-sm space-y-4";
+
+      // header
+      const h = document.createElement("div");
+      h.className = "font-semibold text-base";
+      h.textContent = status;
+      wrap.appendChild(h);
+
+      // SQL
+      if (payload.generated_sql) {
+        const sqlTitle = document.createElement("div");
+        sqlTitle.className = "font-semibold";
+        sqlTitle.textContent = "Generated SQL:";
+        wrap.appendChild(sqlTitle);
+
+        const code = document.createElement("pre");
+        code.className = "code-chip";
+        code.textContent = payload.generated_sql;
+
+        const btn = document.createElement("button");
+        btn.className = "copy-btn";
+        btn.textContent = "Copy";
+        btn.onclick = () => {
+          navigator.clipboard.writeText(payload.generated_sql);
+          btn.textContent = "Copied!";
+          setTimeout(() => (btn.textContent = "Copy"), 1200);
+        };
+        code.appendChild(btn);
+        wrap.appendChild(code);
+      }
+
+      // message / rowcount
+      const mt = document.createElement("div");
+      mt.innerHTML = `<span class="font-semibold">Result:</span><br>${rowCount} row(s) returned${payload.message ? ` — ${DOMPurify.sanitize(payload.message)}` : ""}`;
+      wrap.appendChild(mt);
+
+      // table (if tabular)
+      if (Array.isArray(payload.columns) && payload.columns.length && Array.isArray(payload.rows)) {
+        const scroll = document.createElement("div");
+        scroll.className = "scroll-x";
+        const table = document.createElement("table");
+        table.className = "db-table";
+        const thead = document.createElement("thead");
+        const trh = document.createElement("tr");
+        payload.columns.forEach(c => {
+          const th = document.createElement("th");
+          th.textContent = c;
+          trh.appendChild(th);
+        });
+        thead.appendChild(trh);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        payload.rows.forEach(r => {
+          const tr = document.createElement("tr");
+          // allow either array rows or object rows
+          if (Array.isArray(r)) {
+            r.forEach(v => {
+              const td = document.createElement("td");
+              td.textContent = v === null ? "NULL" : String(v);
+              tr.appendChild(td);
+            });
+          } else {
+            payload.columns.forEach(c => {
+              const td = document.createElement("td");
+              const v = r?.[c];
+              td.textContent = v === null || v === undefined ? "" : String(v);
+              tr.appendChild(td);
+            });
+          }
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        scroll.appendChild(table);
+        wrap.appendChild(scroll);
+      } else if (payload.rows && typeof payload.rows === "object") {
+        // key-value fallback
+        const kv = document.createElement("div");
+        kv.className = "grid grid-cols-1 md:grid-cols-2 gap-2";
+        Object.entries(payload.rows).forEach(([k, v]) => {
+          const box = document.createElement("div");
+          box.className = "border border-gray-700 rounded p-2";
+          box.innerHTML = `<div class="text-xs text-gray-400">${k}</div><div class="font-mono">${DOMPurify.sanitize(String(v))}</div>`;
+          kv.appendChild(box);
+        });
+        wrap.appendChild(kv);
+      }
+
+      target.innerHTML = "";
+      target.appendChild(wrap);
+    }
+
+    function looksLikeDbJson(obj) {
+      return obj && (obj.generated_sql || obj.columns || obj.rows || typeof obj.success === "boolean");
+    }
+
+    // ---------- Submit ----------
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const prompt = promptBox.value.trim();
+      // read these at submit time to avoid stale state
       const format = formatSelect.value;
-      const model = modelSelect.value;
+      const model  = modelSelect.value;
+      const modeKey = modeSelect.value;
       if (!prompt) return;
+
       addMessage("user", prompt);
       chatHistory.push({ role: "user", content: prompt });
       updateTokenCount();
       promptBox.value = "";
       promptBox.style.height = "auto";
       filePreview.innerHTML = "";
+
       const bubble = addMessage("assistant", "▍");
+
       try {
-        const res = await fetch(modeMap[currentMode].endpoint, {
+        // Prefer JSON for database mode
+        const body = { prompt, model, format: modeKey === "database" ? "json" : format };
+
+        const res = await fetch(modeMap[modeKey].endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, model, format })
+          body: JSON.stringify(body)
         });
-        const contentType = res.headers.get("Content-Type");
-        const output = contentType.includes("application/json") ? await res.json() : await res.text();
-        const message = typeof output === "string" ? output : output.text || output.choices?.[0]?.message?.content || JSON.stringify(output);
+
+        const contentType = (res.headers.get("Content-Type") || "").toLowerCase();
+        let output = null, message = null;
+
+        if (contentType.includes("application/json")) {
+          output = await res.json();
+        } else {
+          message = await res.text();
+        }
+
+        // DATABASE: try to render structured JSON if available
+        // DATABASE: try to render structured JSON; otherwise render LLM message
+if (modeKey === "database") {
+  // prefer structured table first
+  if (looksLikeDbJson(output)) {
+    renderDbCard(bubble, {
+      success: output.success,
+      message: output.message,
+      generated_sql: output.generated_sql || output.sql || output.query,
+      columns: output.columns,
+      rows: output.rows,
+      row_count: output.row_count ?? output.count
+    });
+    chatHistory.push({ role: "assistant", content: JSON.stringify(output) });
+    updateTokenCount();
+    return;
+  }
+
+  // if not structured, extract the assistant's message (OpenAI-style shape)
+  const msg = getAssistantMessage(output) ?? message;
+  if (msg) {
+    bubble.innerText = "";
+    chatHistory.push({ role: "assistant", content: msg });
+    updateTokenCount();
+    await simulateStreamingText(bubble, msg);
+    return;
+  }
+
+  // ultimate fallback: stringify whatever JSON we got
+  const text = "```json\n" + JSON.stringify(output, null, 2) + "\n```";
+  bubble.innerText = "";
+  chatHistory.push({ role: "assistant", content: text });
+  updateTokenCount();
+  await simulateStreamingText(bubble, text);
+  return;
+}
+        // NON-DB: normal rendering
+        const finalMessage = typeof output === "string"
+          ? output
+          : output?.text || output?.choices?.[0]?.message?.content || message || JSON.stringify(output);
         bubble.innerText = "";
-        chatHistory.push({ role: "assistant", content: message });
+        chatHistory.push({ role: "assistant", content: finalMessage });
         updateTokenCount();
-        await simulateStreamingText(bubble, message);
+        await simulateStreamingText(bubble, finalMessage);
+
       } catch (err) {
         bubble.innerText = "❌ Error: " + err.message;
       }
     });
 
-    //Auto-expand textarea like ChatGPT
+    // Auto-expand textarea like ChatGPT
     promptBox.addEventListener("input", () => {
       promptBox.style.height = "auto";
       promptBox.style.height = Math.min(promptBox.scrollHeight, 300) + "px";
     });
 
-    //Submit on Enter, newline on Shift+Enter
+    // Submit on Enter, newline on Shift+Enter
     promptBox.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -266,8 +466,7 @@
   </script>
 
   <div class="text-center text-xs text-gray-500 p-4 border-t border-gray-800">
-  This assistant may generate incorrect or incomplete answers. <span class="underline hover:text-gray-300">Please verify important information independently.</span>
-</div>
-
+    This assistant may generate incorrect or incomplete answers. <span class="underline hover:text-gray-300">Please verify important information independently.</span>
+  </div>
 </body>
 </html>
