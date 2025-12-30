@@ -11,8 +11,8 @@ app = Flask(__name__)
 app.register_blueprint(chat_bp)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 12345))
-    host = os.getenv("HOST")
+    port = int(os.getenv("FLASK_PORT", 12346))
+    host = os.getenv("HOST", "0.0.0.0")
     debug = os.getenv("DEBUG", "false").lower() == "true"
 
     app.run(host=host, port=port, debug=debug)
