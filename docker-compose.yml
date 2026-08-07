@@ -12,8 +12,8 @@ services:
       - "12346:12346"
     environment:
       - FLASK_ENV=development
-      - MYSQL_USER=${MYSQL_USER:-root}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-mysqlroot}
+      - MYSQL_USER=${MYSQL_USER:?MYSQL_USER must be set}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set}
     networks:
       - aws_molpay
     command: sh -c "python app.py & /app/go-server"

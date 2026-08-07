@@ -3,6 +3,33 @@ import re
 from flask import jsonify
 import requests
 
+ALLOWED_DATABASES = frozenset({'onlinepayment1', 'onlinepayment2', 'onlinepayment3'})
+READ_ONLY_STATEMENT = re.compile(r'^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b', re.IGNORECASE)
+USE_DATABASE = re.compile(r'^USE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?$', re.IGNORECASE)
+
+
+def _validated_statements(sql):
+    """Return an allowlisted USE/read-only statement pair for generated SQL."""
+    sql = re.sub(r'```sql\s*', '', sql, flags=re.IGNORECASE)
+    sql = re.sub(r'```\s*$', '', sql, flags=re.MULTILINE).strip()
+    statements = [statement.strip() for statement in sql.split(';') if statement.strip()]
+
+    if len(statements) == 1:
+        query = statements[0]
+        use_statement = None
+    elif len(statements) == 2:
+        use_statement, query = statements
+        match = USE_DATABASE.fullmatch(use_statement)
+        if not match or match.group(1).lower() not in ALLOWED_DATABASES:
+            raise ValueError('Only an allowlisted USE database may precede a read-only query')
+    else:
+        raise ValueError('Only one read-only query may be executed at a time')
+
+    if not READ_ONLY_STATEMENT.match(query):
+        raise ValueError('Only read-only SELECT, SHOW, DESCRIBE, or EXPLAIN queries are allowed')
+
+    return ([use_statement] if use_statement else []) + [query]
+
 
 def get_db_connection():
     """Create a connection to the MySQL database running in Docker.
@@ -17,11 +44,15 @@ def get_db_connection():
     last_error = None
     for host in docker_hosts:
         try:
+            user = os.getenv('MYSQL_USER')
+            password = os.getenv('MYSQL_PASSWORD')
+            if not user or password is None:
+                raise RuntimeError('MYSQL_USER and MYSQL_PASSWORD must be configured')
             connection = pymysql.connect(
                 host=host,
                 port=3306,
-                user=os.getenv('MYSQL_USER', 'root'),
-                password=os.getenv('MYSQL_PASSWORD', 'mysqlroot'),
+                user=user,
+                password=password,
                 charset='utf8mb4',
                 cursorclass=pymysql.cursors.DictCursor,
                 connect_timeout=5
@@ -38,60 +69,22 @@ def execute_query(sql):
     """Execute SQL query and return results."""
     connection = None
     try:
-        # Clean up SQL - remove markdown code blocks if present
-        sql = re.sub(r'```sql\s*', '', sql, flags=re.IGNORECASE)
-        sql = re.sub(r'```\s*$', '', sql, flags=re.MULTILINE)
-        sql = sql.strip()
+        statements = _validated_statements(sql)
+        query = statements[-1]
         
         connection = get_db_connection()
         
         with connection.cursor() as cursor:
-            # Split multiple statements if present
-            statements = [s.strip() for s in sql.split(';') if s.strip()]
-            
-            results = []
-            for statement in statements:
-                if not statement:
-                    continue
-                    
-                cursor.execute(statement)
-                
-                # If it's a SELECT, SHOW, or DESCRIBE statement, fetch results
-                if statement.strip().upper().startswith(('SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN')):
-                    result = cursor.fetchall()
-                    results.append({
-                        'query': statement,
-                        'columns': list(result[0].keys()) if result and isinstance(result[0], dict) else None,
-                        'rows': result,
-                        'row_count': len(result)
-                    })
-                else:
-                    # For INSERT, UPDATE, DELETE, etc.
-                    connection.commit()
-                    results.append({
-                        'query': statement,
-                        'affected_rows': cursor.rowcount,
-                        'message': 'Query executed successfully'
-                    })
-            
-            # Return the result with data if available, otherwise return the last result
-            # If we have multiple results, prefer the one with columns/rows
-            import sys
-            print(f"DEBUG: Total results: {len(results)}", file=sys.stderr)
-            for i, result in enumerate(results):
-                print(f"DEBUG: Result {i}: {result}", file=sys.stderr)
-            sys.stderr.flush()
-            
-            for result in results:
-                if 'columns' in result and result['columns']:
-                    print(f"DEBUG: Returning result with columns", file=sys.stderr)
-                    sys.stderr.flush()
-                    return result
-            
-            # Return the last result if no data results
-            print(f"DEBUG: Returning last result", file=sys.stderr)
-            sys.stderr.flush()
-            return results[-1] if results else {'message': 'Query executed successfully'}
+            if len(statements) == 2:
+                cursor.execute(statements[0])
+            cursor.execute(query)
+            result = cursor.fetchall()
+            return {
+                'query': query,
+                'columns': list(result[0].keys()) if result and isinstance(result[0], dict) else None,
+                'rows': result,
+                'row_count': len(result)
+            }
             
     except Exception as e:
         import sys
@@ -211,7 +204,7 @@ def run_database_chat(prompt, model, response_format):
             }), 200
         
         # Execute the SQL query
-        print(f"DEBUG: About to call execute_query", file=sys.stderr)
+        print("DEBUG: About to call execute_query", file=sys.stderr)
         sys.stderr.flush()
         query_result = execute_query(sql)
         print(f"DEBUG: Query result: {query_result}", file=sys.stderr)
@@ -272,4 +265,3 @@ def run_database_chat(prompt, model, response_format):
                 }
             }]
         }), 200
-

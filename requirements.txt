@@ -1,4 +1,4 @@
 flask
 requests
 python-dotenv
-pymysql
+pymysql>=1.1.1
