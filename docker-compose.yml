@@ -9,8 +9,15 @@ services:
     container_name: chatbot
     ports:
       - "12345:12345"
-    volumes:
-      - .:/app
+      - "12346:12346"
     environment:
       - FLASK_ENV=development
-    command: python app.py
+      - MYSQL_USER=${MYSQL_USER:?MYSQL_USER must be set}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set}
+    networks:
+      - aws_molpay
+    command: sh -c "python app.py & /app/go-server"
+
+networks:
+  aws_molpay:
+    external: true
