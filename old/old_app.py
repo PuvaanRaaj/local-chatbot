@@ -170,7 +170,7 @@ SYSTEM_PROMPTS = {
 }
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 12345))
+    port = int(os.getenv("PORT", "12345"))
     host = os.getenv("HOST")
     debug = os.getenv("DEBUG", "false").lower() == "true"
 

@@ -1,22 +1,26 @@
 from flask import Blueprint, jsonify, request, send_from_directory
 
 from config.prompts import SYSTEM_PROMPTS
-from services.llama_runner import run_chat
 from services.database_service import run_database_chat
+from services.llama_runner import run_chat
 
 chat_bp = Blueprint("chat_bp", __name__)
+
 
 @chat_bp.route("/")
 def index():
     return send_from_directory("templates", "index.html")
 
+
 @chat_bp.route("/chat.html")
 def chat_ui():
     return send_from_directory("templates", "chat.html")
 
+
 @chat_bp.route("/models", methods=["GET"])
 def list_models():
     import requests
+
     try:
         response = requests.get(
             "http://host.docker.internal:12434/engines/llama.cpp/v1/models", timeout=10
@@ -26,6 +30,7 @@ def list_models():
     except requests.exceptions.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
+
 def extract_payload(data):
     return (
         data.get("prompt", ""),
@@ -33,12 +38,14 @@ def extract_payload(data):
         data.get("format", "json"),
     )
 
+
 # Optional aliases to be forgiving with paths
 ALIASES = {
     "database query": "database",
     "database-query": "database",
     "db": "database",
 }
+
 
 @chat_bp.route("/chat/<mode>", methods=["POST"])
 def dynamic_chat_handler(mode):

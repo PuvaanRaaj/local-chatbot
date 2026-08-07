@@ -1,18 +1,23 @@
-import pymysql
 import re
-from flask import jsonify
-import requests
 
-ALLOWED_DATABASES = frozenset({'onlinepayment1', 'onlinepayment2', 'onlinepayment3'})
-READ_ONLY_STATEMENT = re.compile(r'^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b', re.IGNORECASE)
-USE_DATABASE = re.compile(r'^USE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?$', re.IGNORECASE)
+import pymysql
+import requests
+from flask import jsonify
+
+ALLOWED_DATABASES = frozenset({"onlinepayment1", "onlinepayment2", "onlinepayment3"})
+READ_ONLY_STATEMENT = re.compile(
+    r"^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b", re.IGNORECASE
+)
+USE_DATABASE = re.compile(r"^USE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?$", re.IGNORECASE)
 
 
 def _validated_statements(sql):
     """Return an allowlisted USE/read-only statement pair for generated SQL."""
-    sql = re.sub(r'```sql\s*', '', sql, flags=re.IGNORECASE)
-    sql = re.sub(r'```\s*$', '', sql, flags=re.MULTILINE).strip()
-    statements = [statement.strip() for statement in sql.split(';') if statement.strip()]
+    sql = re.sub(r"```sql\s*", "", sql, flags=re.IGNORECASE)
+    sql = re.sub(r"```\s*$", "", sql, flags=re.MULTILINE).strip()
+    statements = [
+        statement.strip() for statement in sql.split(";") if statement.strip()
+    ]
 
     if len(statements) == 1:
         query = statements[0]
@@ -21,48 +26,54 @@ def _validated_statements(sql):
         use_statement, query = statements
         match = USE_DATABASE.fullmatch(use_statement)
         if not match or match.group(1).lower() not in ALLOWED_DATABASES:
-            raise ValueError('Only an allowlisted USE database may precede a read-only query')
+            raise ValueError(
+                "Only an allowlisted USE database may precede a read-only query"
+            )
     else:
-        raise ValueError('Only one read-only query may be executed at a time')
+        raise ValueError("Only one read-only query may be executed at a time")
 
     if not READ_ONLY_STATEMENT.match(query):
-        raise ValueError('Only read-only SELECT, SHOW, DESCRIBE, or EXPLAIN queries are allowed')
+        raise ValueError(
+            "Only read-only SELECT, SHOW, DESCRIBE, or EXPLAIN queries are allowed"
+        )
 
     return ([use_statement] if use_statement else []) + [query]
 
 
 def get_db_connection():
     """Create a connection to the MySQL database running in Docker.
-    
+
     The database container is named 'rds_payment' and runs on port 3306 in the 'vpc_test_1network' network.
     """
     import os
-    
+
     # Try to connect from within Docker network first
-    docker_hosts = ['rds_payment', 'localhost', 'host.docker.internal']
-    
+    docker_hosts = ["rds_payment", "localhost", "host.docker.internal"]
+
     last_error = None
     for host in docker_hosts:
         try:
-            user = os.getenv('MYSQL_USER')
-            password = os.getenv('MYSQL_PASSWORD')
+            user = os.getenv("MYSQL_USER")
+            password = os.getenv("MYSQL_PASSWORD")
             if not user or password is None:
-                raise RuntimeError('MYSQL_USER and MYSQL_PASSWORD must be configured')
+                raise RuntimeError("MYSQL_USER and MYSQL_PASSWORD must be configured")
             connection = pymysql.connect(
                 host=host,
                 port=3306,
                 user=user,
                 password=password,
-                charset='utf8mb4',
+                charset="utf8mb4",
                 cursorclass=pymysql.cursors.DictCursor,
-                connect_timeout=5
+                connect_timeout=5,
             )
             return connection
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - connection errors vary by driver/host
             last_error = e
             continue
-    
-    raise Exception(f"Failed to connect to database after trying hosts: {docker_hosts}. Last error: {str(last_error)}")
+
+    raise RuntimeError(
+        f"Failed to connect to database after trying hosts: {docker_hosts}. Last error: {last_error!s}"
+    ) from last_error
 
 
 def execute_query(sql):
@@ -71,26 +82,31 @@ def execute_query(sql):
     try:
         statements = _validated_statements(sql)
         query = statements[-1]
-        
+
         connection = get_db_connection()
-        
+
         with connection.cursor() as cursor:
             if len(statements) == 2:
                 cursor.execute(statements[0])
             cursor.execute(query)
             result = cursor.fetchall()
             return {
-                'query': query,
-                'columns': list(result[0].keys()) if result and isinstance(result[0], dict) else None,
-                'rows': result,
-                'row_count': len(result)
+                "query": query,
+                "columns": (
+                    list(result[0].keys())
+                    if result and isinstance(result[0], dict)
+                    else None
+                ),
+                "rows": result,
+                "row_count": len(result),
             }
-            
-    except Exception as e:
+
+    except (ValueError, RuntimeError, pymysql.Error, OSError) as e:
         import sys
+
         print(f"DEBUG: Exception in execute_query: {e}", file=sys.stderr)
         sys.stderr.flush()
-        return {'error': str(e), 'query': sql}
+        return {"error": str(e), "query": sql}
     finally:
         if connection:
             connection.close()
@@ -100,7 +116,7 @@ def run_database_chat(prompt, model, response_format):
     """Main function to process natural language database queries."""
     print(f"DEBUG: Starting database chat with prompt: {prompt}")
     MODEL_RUNNER_API = "http://host.docker.internal:12434"
-    
+
     # First, use LLM to convert natural language to SQL
     # Use a very strict prompt to get only SQL
     payload = {
@@ -108,160 +124,186 @@ def run_database_chat(prompt, model, response_format):
         "messages": [
             {
                 "role": "system",
-                "content": "Generate SQL queries ONLY. Output format: USE database_name; SQL_QUERY;\n\nDatabases: onlinepayment1, onlinepayment2, onlinepayment3\n\nDo NOT output explanations, descriptions, or example data.\n\nOutput ONLY this format:\nUSE onlinepayment1; SELECT * FROM table LIMIT 100;"
+                "content": "Generate SQL queries ONLY. Output format: USE database_name; SQL_QUERY;\n\nDatabases: onlinepayment1, onlinepayment2, onlinepayment3\n\nDo NOT output explanations, descriptions, or example data.\n\nOutput ONLY this format:\nUSE onlinepayment1; SELECT * FROM table LIMIT 100;",
             },
             {
-                "role": "user", 
-                "content": "Convert this to SQL (output only the SQL query, no explanations): " + prompt
-            }
+                "role": "user",
+                "content": "Convert this to SQL (output only the SQL query, no explanations): "
+                + prompt,
+            },
         ],
-        "temperature": 0.1  # Lower temperature for more deterministic output
+        "temperature": 0.1,  # Lower temperature for more deterministic output
     }
-    
+
     try:
         # Get SQL from LLM
         response = requests.post(
             f"{MODEL_RUNNER_API}/engines/llama.cpp/v1/chat/completions",
             json=payload,
-            timeout=60
+            timeout=60,
         )
         response.raise_for_status()
         llm_response = response.json()
-        
+
         # Extract SQL from LLM response
         raw_sql = llm_response["choices"][0]["message"]["content"].strip()
-        
+
         # Debug: Print what we got from LLM
         import sys
+
         print(f"DEBUG: Raw LLM response: {raw_sql}", file=sys.stderr)
         sys.stderr.flush()
-        
+
         # Extract SQL - look for SELECT statements first
         sql = None
-        
+
         # Method 1: Look for SELECT statement with database.table format
-        match = re.search(r'SELECT\s+.*\s+FROM\s+[\w\.`]+\s+WHERE\s+.*;', raw_sql, re.IGNORECASE | re.DOTALL)
+        match = re.search(
+            r"SELECT\s+.*\s+FROM\s+[\w\.`]+\s+WHERE\s+.*;",
+            raw_sql,
+            re.IGNORECASE | re.DOTALL,
+        )
         if match:
             sql = match.group(0)
             print(f"DEBUG: Found SQL via method 1: {sql}", file=sys.stderr)
             sys.stderr.flush()
-        
+
         # Method 2: Look for full SELECT statement (with multi-line support)
         if not sql:
             # Match SELECT ... FROM ... (rest of query) until semicolon
-            match = re.search(r'SELECT\s+[^;]+;', raw_sql, re.IGNORECASE | re.DOTALL)
+            match = re.search(r"SELECT\s+[^;]+;", raw_sql, re.IGNORECASE | re.DOTALL)
             if match:
                 sql = match.group(0)
                 print(f"DEBUG: Found SQL via method 2: {sql}", file=sys.stderr)
                 sys.stderr.flush()
-        
+
         # Method 3: If still no SQL, try to extract from code blocks
         if not sql:
             # Look for content between ```sql and ```
-            code_match = re.search(r'```sql\s*(.*?)\s*```', raw_sql, re.IGNORECASE | re.DOTALL)
+            code_match = re.search(
+                r"```sql\s*(.*?)\s*```", raw_sql, re.IGNORECASE | re.DOTALL
+            )
             if code_match:
                 sql = code_match.group(1).strip()
                 print(f"DEBUG: Found SQL via method 3: {sql}")
-        
+
         # Method 4: Last resort - find any line that looks like SQL
         if not sql:
-            lines = raw_sql.split('\n')
+            lines = raw_sql.split("\n")
             for line in lines:
                 line = line.strip()
-                if re.match(r'SELECT\s+.*?\s+FROM\s+', line, re.IGNORECASE):
+                if re.match(r"SELECT\s+.*?\s+FROM\s+", line, re.IGNORECASE):
                     sql = line
-                    if not sql.endswith(';'):
-                        sql += ';'
+                    if not sql.endswith(";"):
+                        sql += ";"
                     print(f"DEBUG: Found SQL via method 4: {sql}")
                     break
-        
+
         # Clean up the SQL
         if sql:
             sql = sql.strip()
             # Check if USE statement is present in raw_sql and prepend it if not already in sql
-            use_match = re.search(r'USE\s+\w+;', raw_sql, re.IGNORECASE)
-            if use_match and 'USE' not in sql.upper():
+            use_match = re.search(r"USE\s+\w+;", raw_sql, re.IGNORECASE)
+            if use_match and "USE" not in sql.upper():
                 use_statement = use_match.group(0)
                 sql = f"{use_statement} {sql}"
-            elif 'onlinepayment1' in raw_sql.lower() and 'USE' not in sql.upper():
+            elif "onlinepayment1" in raw_sql.lower() and "USE" not in sql.upper():
                 sql = f"USE onlinepayment1; {sql}"
-            elif 'onlinepayment2' in raw_sql.lower() and 'USE' not in sql.upper():
+            elif "onlinepayment2" in raw_sql.lower() and "USE" not in sql.upper():
                 sql = f"USE onlinepayment2; {sql}"
-            elif 'onlinepayment3' in raw_sql.lower() and 'USE' not in sql.upper():
+            elif "onlinepayment3" in raw_sql.lower() and "USE" not in sql.upper():
                 sql = f"USE onlinepayment3; {sql}"
-        
+
         print(f"DEBUG: Final SQL to execute: {sql}", file=sys.stderr)
         sys.stderr.flush()
-        
+
         # Check if we found SQL
         if not sql:
-            return jsonify({
-                'choices': [{
-                    'message': {
-                        'content': f'**Error:** Could not extract SQL from LLM response.\n\n**Raw response:**\n```\n{raw_sql}\n```\n\nPlease try rephrasing your query.'
+            return (
+                jsonify(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": f"**Error:** Could not extract SQL from LLM response.\n\n**Raw response:**\n```\n{raw_sql}\n```\n\nPlease try rephrasing your query."
+                                }
+                            }
+                        ]
                     }
-                }]
-            }), 200
-        
+                ),
+                200,
+            )
+
         # Execute the SQL query
         print("DEBUG: About to call execute_query", file=sys.stderr)
         sys.stderr.flush()
         query_result = execute_query(sql)
         print(f"DEBUG: Query result: {query_result}", file=sys.stderr)
         sys.stderr.flush()
-        print(f"DEBUG: query_result keys: {query_result.keys() if isinstance(query_result, dict) else 'not a dict'}", file=sys.stderr)
+        print(
+            f"DEBUG: query_result keys: {query_result.keys() if isinstance(query_result, dict) else 'not a dict'}",
+            file=sys.stderr,
+        )
         sys.stderr.flush()
-        
+
         # Format the response
-        if 'error' in query_result:
+        if "error" in query_result:
             error_message = f"**Database Query Error**\n\n**Generated SQL:**\n```sql\n{query_result.get('query', '')}\n```\n\n**Error:** {query_result['error']}"
-            return jsonify({
-                'choices': [{
-                    'message': {
-                        'content': error_message
-                    }
-                }]
-            }), 200
-        
+            return jsonify({"choices": [{"message": {"content": error_message}}]}), 200
+
         # Format successful response
         response_text = f"**Query Executed Successfully**\n\n**Generated SQL:**\n```sql\n{query_result.get('query', '')}\n```\n\n"
-        
-        if 'columns' in query_result and query_result['columns']:
-            response_text += f"**Result:**\n{query_result.get('row_count', 0)} row(s) returned\n\n"
-            
+
+        if query_result.get("columns"):
+            response_text += (
+                f"**Result:**\n{query_result.get('row_count', 0)} row(s) returned\n\n"
+            )
+
             # Format as table
-            if query_result.get('rows'):
-                response_text += "| " + " | ".join(query_result['columns']) + " |\n"
-                response_text += "| " + " | ".join(["---"] * len(query_result['columns'])) + " |\n"
-                for row in query_result['rows'][:50]:  # Limit to 50 rows for display
-                    values = [str(row.get(col, '')) for col in query_result['columns']]
+            if query_result.get("rows"):
+                response_text += "| " + " | ".join(query_result["columns"]) + " |\n"
+                response_text += (
+                    "| " + " | ".join(["---"] * len(query_result["columns"])) + " |\n"
+                )
+                for row in query_result["rows"][:50]:  # Limit to 50 rows for display
+                    values = [str(row.get(col, "")) for col in query_result["columns"]]
                     response_text += "| " + " | ".join(values) + " |\n"
-                if len(query_result['rows']) > 50:
-                    response_text += f"\n*Showing first 50 of {len(query_result['rows'])} rows*"
-        elif 'affected_rows' in query_result:
+                if len(query_result["rows"]) > 50:
+                    response_text += (
+                        f"\n*Showing first 50 of {len(query_result['rows'])} rows*"
+                    )
+        elif "affected_rows" in query_result:
             response_text += f"**Result:** {query_result.get('message', 'Query executed')} - {query_result.get('affected_rows', 0)} row(s) affected"
-        
-        return jsonify({
-            'choices': [{
-                'message': {
-                    'content': response_text
-                }
-            }]
-        }), 200
-        
+
+        return jsonify({"choices": [{"message": {"content": response_text}}]}), 200
+
     except requests.exceptions.RequestException as e:
-        return jsonify({
-            'choices': [{
-                'message': {
-                    'content': f'**Error:** Failed to communicate with LLM: {str(e)}'
+        return (
+            jsonify(
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": f"**Error:** Failed to communicate with LLM: {e!s}"
+                            }
+                        }
+                    ]
                 }
-            }]
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'choices': [{
-                'message': {
-                    'content': f'**Error:** Database query failed: {str(e)}\n\nMake sure the MySQL container (rds_payment) is running and the chatbot is connected to the aws_molpay network.'
+            ),
+            200,
+        )
+    except Exception as e:  # noqa: BLE001 - preserve the API's error response contract
+        return (
+            jsonify(
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": f"**Error:** Database query failed: {e!s}\n\nMake sure the MySQL container (rds_payment) is running and the chatbot is connected to the aws_molpay network."
+                            }
+                        }
+                    ]
                 }
-            }]
-        }), 200
+            ),
+            200,
+        )
